@@ -1,0 +1,11 @@
+*.iml
+.gradle/
+/local.properties
+/.idea/
+.DS_Store
+build/
+/app/.cxx/
+captures/
+# Large / licensed assets: never commit
+*.gguf
+*.vrm

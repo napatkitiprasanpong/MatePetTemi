@@ -69,12 +69,15 @@ class MainActivity : Activity(), OnRobotReadyListener, Robot.AsrListener, Robot.
 
     private fun ask(q: String) {
         if (q.isBlank()) return
-        AppLauncher.handle(this, q)?.let { speak(it); return }
+        if (IaqCommands.handle(this, q, ::speak)) return          // IAQ app: open / control / read
+        AppLauncher.handle(this, q)?.let { speak(it); return }    // any other app
         if (!ready || !busy.compareAndSet(false, true)) return
         io.execute {
             try {
                 val out = ByteArrayOutputStream()
-                LlamaBridge.nativeGenerate(persona, q.trim(), 96) { piece ->
+                // give the small model live room data when the question is about the room
+                val sys = persona + (if (IaqCommands.relevant(q)) IaqClient.status(this)?.let { " Live room data: " + IaqClient.compact(it) + "." } ?: "" else "")
+                LlamaBridge.nativeGenerate(sys, q.trim(), 96) { piece ->
                     out.write(piece); val s = String(out.toByteArray(), Charsets.UTF_8)
                     runOnUiThread { reply.text = s }; true
                 }

@@ -17,7 +17,7 @@ android {
     kotlinOptions { jvmTarget = "1.8" }
 }
 dependencies {
-    implementation("com.robotemi:sdk:1.137.1")
+    implementation("com.robotemi:sdk:1.138.0")
     implementation("com.google.android.filament:filament-android:1.56.0")
     implementation("com.google.android.filament:gltfio-android:1.56.0")
     implementation("com.google.android.filament:filament-utils-android:1.56.0")

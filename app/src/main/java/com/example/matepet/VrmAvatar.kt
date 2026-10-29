@@ -23,10 +23,12 @@ class VrmAvatar(ctx: Context, file: File) : SurfaceView(ctx), Choreographer.Fram
     private var running = false
 
     init {
-        val bytes = file.readBytes()
-        mv.loadModelGlb(ByteBuffer.wrap(bytes))
+        // memory-mapped: a big .vrm never has to fit in the Java heap
+        val buf = java.io.RandomAccessFile(file, "r").use { it.channel.map(java.nio.channels.FileChannel.MapMode.READ_ONLY, 0, it.length()) }
+        val jsonBuf = buf.duplicate()
+        mv.loadModelGlb(buf)
         mv.transformToUnitCube()
-        val json = glbJson(ByteBuffer.wrap(bytes))
+        val json = glbJson(jsonBuf)
         val binds = parseExpressions(json)
         byEntity = binds.groupBy { it.entity }
         if (json.optJSONObject("extensions")?.has("VRM") == true) faceForward()  // VRM 0.x faces -Z

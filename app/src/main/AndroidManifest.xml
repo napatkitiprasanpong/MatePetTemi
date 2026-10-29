@@ -1,5 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <queries><intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent></queries>
+    <!-- Defined by the IAQ app (signature level). Install the IAQ app first, then this one. -->
+    <uses-permission android:name="com.leslie.iaqieqmornitoring.permission.BRIDGE" />
+    <queries>
+        <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
+        <package android:name="com.leslie.iaqieqmornitoring" />
+        <provider android:authorities="com.leslie.iaqieqmornitoring.bridge" />
+    </queries>
     <application android:label="@string/app_name" android:largeHeap="true"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
         <meta-data android:name="com.robotemi.sdk.metadata.SKILL" android:value="@string/app_name" />
