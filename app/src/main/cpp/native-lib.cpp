@@ -24,7 +24,7 @@ Java_com_example_matepet_LlamaBridge_nativeLoad(JNIEnv* env, jobject, jstring jp
     llama_sampler_chain_add(g_smpl, llama_sampler_init_top_k(40));
     llama_sampler_chain_add(g_smpl, llama_sampler_init_top_p(0.9f, 1));
     llama_sampler_chain_add(g_smpl, llama_sampler_init_temp(0.7f));
-    llama_sampler_chain_add(g_smpl, llama_sampler_init_dist(1234));
+    llama_sampler_chain_add(g_smpl, llama_sampler_init_dist(LLAMA_DEFAULT_SEED));
     return JNI_TRUE;
 }
 

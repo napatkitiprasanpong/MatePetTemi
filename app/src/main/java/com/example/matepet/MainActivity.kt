@@ -40,7 +40,7 @@ class MainActivity : Activity(), OnRobotReadyListener, Robot.AsrListener, Robot.
         })
         io.execute {   // model is pushed with scripts/install-assets.sh
             val f = File(dir, "model.gguf")
-            ready = f.exists() && LlamaBridge.nativeLoad(f.path, maxOf(2, Runtime.getRuntime().availableProcessors() - 1))
+            ready = f.exists() && LlamaBridge.nativeLoad(f.path, (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2))
             if (ready) speak("Hello, I'm Mate. Ask me anything, or say open and an app name.")
             else runOnUiThread { reply.text = "Model missing: ${f.path} (app launching still works)" }
         }
@@ -60,28 +60,37 @@ class MainActivity : Activity(), OnRobotReadyListener, Robot.AsrListener, Robot.
     override fun onTtsStatusChanged(ttsRequest: TtsRequest) { avatar.talking = ttsRequest.status == TtsRequest.Status.STARTED }
 
     /** Shows the text and has temi say it aloud (markdown symbols stripped so TTS doesn't read them). */
-    private fun speak(t: String) {
+    private fun speak(t: String, show: Boolean = true) {
         val s = t.replace(Regex("[*_#`~]"), "").replace(Regex("\\s+"), " ").trim()
         if (s.isEmpty()) return
-        runOnUiThread { reply.text = s }
+        if (show) runOnUiThread { reply.text = s }
         runCatching { robot.speak(TtsRequest.create(s, false)) }
     }
 
     private fun ask(q: String) {
         if (q.isBlank()) return
-        if (IaqCommands.handle(this, q, ::speak)) return          // IAQ app: open / control / read
-        AppLauncher.handle(this, q)?.let { speak(it); return }    // any other app
+        if (IaqCommands.handle(this, q, ::speak, ::chat)) return   // IAQ app: open / control / read / answer popup
+        AppLauncher.handle(this, q)?.let { speak(it); return }     // any other app
+        chat(q)
+    }
+
+    /** Local AI chat. Each finished sentence is spoken immediately so temi does not stay silent while the model works. */
+    private fun chat(q: String) {
         if (!ready || !busy.compareAndSet(false, true)) return
         io.execute {
             try {
                 val out = ByteArrayOutputStream()
-                // give the small model live room data when the question is about the room
                 val sys = persona + (if (IaqCommands.relevant(q)) IaqClient.status(this)?.let { " Live room data: " + IaqClient.compact(it) + "." } ?: "" else "")
-                LlamaBridge.nativeGenerate(sys, q.trim(), 96) { piece ->
+                var spoken = 0
+                val sentence = Regex("^(.+?[.!?])(\\s|$)", RegexOption.DOT_MATCHES_ALL)
+                LlamaBridge.nativeGenerate(sys, q.trim(), 64) { piece ->
                     out.write(piece); val s = String(out.toByteArray(), Charsets.UTF_8)
-                    runOnUiThread { reply.text = s }; true
+                    runOnUiThread { reply.text = s }
+                    sentence.find(s.substring(spoken))?.let { speak(it.groupValues[1], show = false); spoken += it.range.last + 1 }
+                    true
                 }
-                speak(String(out.toByteArray(), Charsets.UTF_8))
+                val rest = String(out.toByteArray(), Charsets.UTF_8).substring(spoken).trim()
+                if (rest.isNotEmpty()) speak(rest, show = false) else if (spoken == 0) speak("Sorry, I did not catch that.")
             } finally { busy.set(false) }
         }
     }

@@ -24,9 +24,11 @@ object IaqClient {
         c.sendBroadcast(Intent("$PKG.action.COMMAND").setPackage(PKG).putExtra("cmd", cmd).putExtra("arg", arg))
 
     /** Live status JSON, or null if the app isn't installed/running/ready. Call off the main thread. */
-    fun status(c: Context): JSONObject? = runCatching {
+    @Volatile var denied = false   // true when Android refused us (the two apps are signed with different keys)
+    fun status(c: Context): JSONObject? = try {
+        denied = false
         c.contentResolver.query(STATUS, null, null, null, null)?.use { if (it.moveToFirst()) JSONObject(it.getString(0)) else null }
-    }.getOrNull()
+    } catch (e: SecurityException) { denied = true; null } catch (e: Exception) { null }
 
     private fun value(j: JSONObject, k: String) = j.optJSONObject("sensors")?.optDouble(k)?.takeIf { !it.isNaN() }
     private fun fmt(d: Double) = if (d % 1.0 == 0.0) d.toInt().toString() else "%.1f".format(d)

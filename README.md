@@ -24,6 +24,7 @@ Say (after "Hey temi"):
 - "Open the monitoring app" - launches it
 - "Start mission on Route A" / "Start inspection" / "Stop mission"
 - "Start routine" / "Stop routine"
+- "Yes" or "Come back later" - answers the routine popup ("Please drink water") when one is waiting
 - "Show the dashboard" / "Open the mission tab"
 - Any question about the room ("should I open a window?") - the local AI receives the live readings as context.
 

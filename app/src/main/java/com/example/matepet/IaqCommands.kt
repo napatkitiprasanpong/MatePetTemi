@@ -11,6 +11,8 @@ object IaqCommands {
     private val ROUTINE = Regex("^(?:please )?(?:start|run)\\s+(?:the )?routine(?:\\s+(.+))?$", I)
     private val STOP_R = Regex("^(?:please )?(?:stop|cancel)\\s+(?:the )?routine$", I)
     private val TAB = Regex("^(?:please )?(?:open|show|go to)\\s+(?:me )?(?:the )?(dashboard|analytics|mission|routine|settings|startup|sign language|camera and depth|depth)(?:\\s+(tab|screen|page))?$", I)
+    private val YES = Regex("^(?:yes|yeah|yep|okay|ok|done|i did|i have)(?: thanks| thank you)?$", I)
+    private val LATER = Regex("^(?:later|not now|snooze|come back(?: later)?|come back in .+|ask me later)$", I)
     private val AIR = Regex("air quality|how(?:'s| is) the air|air condition|room (?:condition|data)|\\biaq\\b", I)
     private val Q = Regex("^(?:what|how|tell|read|check|is|are)\\b", I)
     private val SENSOR = mapOf(
@@ -23,7 +25,7 @@ object IaqCommands {
     fun relevant(q: String) = CONTEXT.containsMatchIn(q)
 
     /** True if [q] was an IAQ command (temi answers through [say], on a background thread). */
-    fun handle(ctx: Context, q: String, say: (String) -> Unit): Boolean {
+    fun handle(ctx: Context, q: String, say: (String) -> Unit, chat: (String) -> Unit): Boolean {
         val t = q.trim().trimEnd('.', '!', '?')
         val job: (() -> Unit) = when {
             OPEN.matches(t) -> { { say(if (IaqClient.open(ctx)) "Opening the monitoring app." else "The monitoring app isn't installed.") } }
@@ -36,6 +38,7 @@ object IaqCommands {
                 if (suffix.isEmpty() && name !in listOf("dashboard", "analytics")) return false
                 { control(ctx, "OPEN_TAB", name, say) }
             }
+            YES.matches(t) || LATER.matches(t) -> { { answer(ctx, q, if (YES.matches(t)) "yes" else "later", say, chat) } }
             AIR.containsMatchIn(t) -> { { withStatus(ctx, say) { say(IaqClient.summary(it)) } } }
             Q.containsMatchIn(t) && SENSOR.any { it.value.containsMatchIn(t) } -> {
                 val k = SENSOR.entries.first { it.value.containsMatchIn(t) }.key
@@ -46,9 +49,16 @@ object IaqCommands {
         Thread(job).start(); return true
     }
 
+    /** "yes" / "come back later" answers temi's routine popup, but only if one is waiting; otherwise it is normal chat. */
+    private fun answer(ctx: Context, q: String, a: String, say: (String) -> Unit, chat: (String) -> Unit) {
+        val s = IaqClient.status(ctx)
+        if (s?.optJSONObject("prompt")?.optBoolean("active") == true) control(ctx, "ANSWER", a, say) else chat(q)
+    }
+
     private fun withStatus(ctx: Context, say: (String) -> Unit, f: (org.json.JSONObject) -> Unit) {
         val s = IaqClient.status(ctx)
-        if (s == null) { IaqClient.open(ctx); say("The monitoring app wasn't ready, so I'm opening it. Please ask again in a moment.") } else f(s)
+        if (s == null && IaqClient.denied) say("I am not allowed to talk to the monitoring app. Both apps must be signed with the same key.")
+        else if (s == null) { IaqClient.open(ctx); say("The monitoring app wasn't ready, so I'm opening it. Please ask again in a moment.") } else f(s)
     }
 
     /** Send a command, then speak the monitoring app's own reply (e.g. "Not saved on temi: Lab A"). */

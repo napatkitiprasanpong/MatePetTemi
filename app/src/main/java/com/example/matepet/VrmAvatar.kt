@@ -21,6 +21,7 @@ class VrmAvatar(ctx: Context, file: File) : SurfaceView(ctx), Choreographer.Fram
     private val mv = ModelViewer(this)
     private var byEntity: Map<Int, List<Bind>> = emptyMap()
     private var running = false
+    private var lastNs = 0L
 
     init {
         // memory-mapped: a big .vrm never has to fit in the Java heap
@@ -28,6 +29,7 @@ class VrmAvatar(ctx: Context, file: File) : SurfaceView(ctx), Choreographer.Fram
         val jsonBuf = buf.duplicate()
         mv.loadModelGlb(buf)
         mv.transformToUnitCube()
+        frameUpperBody()
         val json = glbJson(jsonBuf)
         val binds = parseExpressions(json)
         byEntity = binds.groupBy { it.entity }
@@ -71,6 +73,15 @@ class VrmAvatar(ctx: Context, file: File) : SurfaceView(ctx), Choreographer.Fram
         return out
     }
 
+    /** The unit-cube fit shows the whole body small; zoom in on head and chest. Tune ZOOM / DOWN on the robot. */
+    private fun frameUpperBody() {
+        val ZOOM = 2.0f; val DOWN = 0.9f
+        val tm = mv.engine.transformManager; val root = mv.asset?.root ?: return
+        val inst = tm.getInstance(root); val m = FloatArray(16); tm.getTransform(inst, m)
+        for (i in intArrayOf(0, 1, 2, 4, 5, 6, 8, 9, 10, 12, 13, 14)) m[i] *= ZOOM
+        m[13] -= DOWN; tm.setTransform(inst, m)
+    }
+
     private fun faceForward() {   // rotate 180 deg about Y: negate the X and Z basis columns
         val tm = mv.engine.transformManager; val root = mv.asset?.root ?: return
         val inst = tm.getInstance(root); val m = FloatArray(16)
@@ -94,6 +105,8 @@ class VrmAvatar(ctx: Context, file: File) : SurfaceView(ctx), Choreographer.Fram
     override fun doFrame(ns: Long) {
         if (!running) return
         Choreographer.getInstance().postFrameCallback(this)
+        if (ns - lastNs < 33_000_000L) return            // 30 fps cap: leaves CPU for the language model
+        lastNs = ns
         animate(System.currentTimeMillis()); mv.render(ns)
     }
     override fun onAttachedToWindow() { super.onAttachedToWindow(); running = true; Choreographer.getInstance().postFrameCallback(this) }
