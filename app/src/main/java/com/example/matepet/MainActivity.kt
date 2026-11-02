@@ -1,97 +1,59 @@
 package com.example.matepet
 
+import android.Manifest
 import android.app.Activity
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
-import android.widget.*
-import com.google.android.filament.utils.Utils
-import com.robotemi.sdk.Robot
-import com.robotemi.sdk.SttLanguage
-import com.robotemi.sdk.TtsRequest
-import com.robotemi.sdk.listeners.OnRobotReadyListener
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
+import android.provider.Settings
+import android.widget.TextView
 
-class MainActivity : Activity(), OnRobotReadyListener, Robot.AsrListener, Robot.TtsListener {
-    private val robot by lazy { Robot.getInstance() }
-    private val io = Executors.newSingleThreadExecutor()   // one inference at a time
-    private val busy = AtomicBoolean(false)
-    private lateinit var avatar: Talker
-    private lateinit var reply: TextView
-    @Volatile private var ready = false
-    private val persona = "You are Mate, a friendly robot assistant. Answer in English in one or two short sentences."
+/**
+ * Launcher entry. It has no screen of its own (that was the black screen): it makes sure the microphone and
+ * "display over other apps" permissions are there, starts the floating pet, and closes itself.
+ * Only if a permission is missing does it show a short how-to.
+ */
+class MainActivity : Activity() {
+    private var askedMic = false
+    private var askedOverlay = false
+    private var started = false
+    private lateinit var info: TextView
 
     override fun onCreate(b: Bundle?) {
         super.onCreate(b)
-        val dir = getExternalFilesDir(null)
-        val vrm = File(dir, "avatar.vrm")
-        val view: View = runCatching { if (vrm.exists()) { Utils.init(); VrmAvatar(this, vrm) } else null }.getOrNull() ?: FaceView(this)
-        avatar = view as Talker
-        reply = TextView(this).apply { textSize = 22f; setTextColor(-1); gravity = Gravity.CENTER; text = "Loading model..." }
-        val input = EditText(this).apply { hint = "Type to chat (test)"; setTextColor(-1); setHintTextColor(-0x777778) }
-        val send = Button(this).apply { text = "Send"; setOnClickListener { ask(input.text.toString()); input.setText("") } }
-        val row = LinearLayout(this).apply { addView(input, LinearLayout.LayoutParams(0, -2, 1f)); addView(send) }
-        setContentView(LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setBackgroundColor(0xFF000000.toInt())
-            addView(view, LinearLayout.LayoutParams(-1, 0, 1f)); addView(reply); addView(row)
-        })
-        io.execute {   // model is pushed with scripts/install-assets.sh
-            val f = File(dir, "model.gguf").takeIf { it.exists() } ?: File(dir, "SmolLM2-360M-Instruct-Q4_K_M.gguf")
-            ready = f.exists() && LlamaBridge.nativeLoad(f.path, (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2))
-            if (ready) speak("Hello, I'm Mate. Ask me anything, or say open and an app name.")
-            else runOnUiThread { reply.text = "Model missing: ${f.path} (app launching still works)" }
+        info = TextView(this).apply { textSize = 20f; setTextColor(0xFF111111.toInt()); setPadding(dp(32), dp(32), dp(32), dp(32)) }
+        setContentView(info)    // empty and transparent unless something is missing
+    }
+
+    override fun onResume() { super.onResume(); proceed() }
+
+    override fun onRequestPermissionsResult(code: Int, perms: Array<out String>, results: IntArray) { proceed() }
+
+    private fun proceed() {
+        if (started) return
+        if (Build.VERSION.SDK_INT >= 23 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED && !askedMic) {
+            askedMic = true
+            requestPermissions(arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+            return
         }
-    }
-
-    override fun onStart() { super.onStart(); robot.addOnRobotReadyListener(this); robot.addAsrListener(this); robot.addTtsListener(this) }
-    override fun onStop() { super.onStop(); robot.removeOnRobotReadyListener(this); robot.removeAsrListener(this); robot.removeTtsListener(this) }
-
-    override fun onRobotReady(isReady: Boolean) { if (isReady) robot.hideTopBar() }
-
-    // temi speech-to-text -> cancel temi's default reply -> app command or local LLM. Ignore temi's own voice and overlapping requests.
-    override fun onAsrResult(asrResult: String, sttLanguage: SttLanguage) {
-        if (avatar.talking || busy.get()) return
-        robot.finishConversation(); ask(asrResult)
-    }
-
-    override fun onTtsStatusChanged(ttsRequest: TtsRequest) { avatar.talking = ttsRequest.status == TtsRequest.Status.STARTED }
-
-    /** Shows the text and has temi say it aloud (markdown symbols stripped so TTS doesn't read them). */
-    private fun speak(t: String, show: Boolean = true) {
-        val s = t.replace(Regex("[*_#`~]"), "").replace(Regex("\\s+"), " ").trim()
-        if (s.isEmpty()) return
-        if (show) runOnUiThread { reply.text = s }
-        runCatching { robot.speak(TtsRequest.create(s, false)) }
-    }
-
-    private fun ask(q: String) {
-        if (q.isBlank()) return
-        if (IaqCommands.handle(this, q, ::speak, ::chat)) return   // IAQ app: open / control / read / answer popup
-        AppLauncher.handle(this, q)?.let { speak(it); return }     // any other app
-        chat(q)
-    }
-
-    /** Local AI chat. Each finished sentence is spoken immediately so temi does not stay silent while the model works. */
-    private fun chat(q: String) {
-        if (!ready || !busy.compareAndSet(false, true)) return
-        io.execute {
-            try {
-                val out = ByteArrayOutputStream()
-                val sys = persona + (if (IaqCommands.relevant(q)) IaqClient.status(this)?.let { " Live room data: " + IaqClient.compact(it) + "." } ?: "" else "")
-                var spoken = 0
-                val sentence = Regex("^(.+?[.!?])(\\s|$)", RegexOption.DOT_MATCHES_ALL)
-                LlamaBridge.nativeGenerate(sys, q.trim(), 64) { piece ->
-                    out.write(piece); val s = String(out.toByteArray(), Charsets.UTF_8)
-                    runOnUiThread { reply.text = s }
-                    sentence.find(s.substring(spoken))?.let { speak(it.groupValues[1], show = false); spoken += it.range.last + 1 }
-                    true
-                }
-                val rest = String(out.toByteArray(), Charsets.UTF_8).substring(spoken).trim()
-                if (rest.isNotEmpty()) speak(rest, show = false) else if (spoken == 0) speak("Sorry, I did not catch that.")
-            } finally { busy.set(false) }
+        if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(this)) {
+            info.setBackgroundColor(0xFFFFFFFF.toInt())
+            info.text = "MatePet needs permission to display over other apps.\n\n" +
+                "If a settings page opened, switch MatePet on and come back.\n\n" +
+                "On temi without that page, run once from your computer:\n" +
+                "adb shell appops set $packageName SYSTEM_ALERT_WINDOW allow\n\nthen open MatePet again."
+            if (!askedOverlay) {
+                askedOverlay = true
+                runCatching { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
+            }
+            return
         }
+        started = true
+        PetService.start(this, greet = true)
+        finish()
     }
+
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 }

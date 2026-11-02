@@ -21,4 +21,7 @@ dependencies {
     implementation("com.google.android.filament:filament-android:1.56.0")
     implementation("com.google.android.filament:gltfio-android:1.56.0")
     implementation("com.google.android.filament:filament-utils-android:1.56.0")
+    // offline "hey mate" wake word + speech recognition (model is pushed by scripts/install-assets.sh)
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
+    implementation("com.alphacephei:vosk-android:0.3.47")
 }

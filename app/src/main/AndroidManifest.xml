@@ -1,19 +1,25 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Defined by the IAQ app (signature level). Install the IAQ app first, then this one. -->
     <uses-permission android:name="com.leslie.iaqieqmornitoring.permission.BRIDGE" />
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />   <!-- the floating pet -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />           <!-- "hey mate" -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />     <!-- keeps listening behind other apps -->
     <queries>
         <intent><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent>
         <package android:name="com.leslie.iaqieqmornitoring" />
         <provider android:authorities="com.leslie.iaqieqmornitoring.bridge" />
     </queries>
     <application android:label="@string/app_name" android:largeHeap="true"
-        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
+        android:theme="@android:style/Theme.Material.NoActionBar">
         <meta-data android:name="com.robotemi.sdk.metadata.SKILL" android:value="@string/app_name" />
-        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask">
+        <!-- No screen of its own: it only starts the service, so there is nothing to render black. -->
+        <activity android:name=".MainActivity" android:exported="true" android:launchMode="singleTask"
+            android:excludeFromRecents="true" android:theme="@android:style/Theme.Translucent.NoTitleBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <service android:name=".PetService" android:exported="false" android:foregroundServiceType="microphone" />
     </application>
 </manifest>
