@@ -39,7 +39,7 @@ class MainActivity : Activity(), OnRobotReadyListener, Robot.AsrListener, Robot.
             addView(view, LinearLayout.LayoutParams(-1, 0, 1f)); addView(reply); addView(row)
         })
         io.execute {   // model is pushed with scripts/install-assets.sh
-            val f = File(dir, "model.gguf")
+            val f = File(dir, "model.gguf").takeIf { it.exists() } ?: File(dir, "SmolLM2-360M-Instruct-Q4_K_M.gguf")
             ready = f.exists() && LlamaBridge.nativeLoad(f.path, (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(2))
             if (ready) speak("Hello, I'm Mate. Ask me anything, or say open and an app name.")
             else runOnUiThread { reply.text = "Model missing: ${f.path} (app launching still works)" }

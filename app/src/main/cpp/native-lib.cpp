@@ -12,7 +12,7 @@ Java_com_example_matepet_LlamaBridge_nativeLoad(JNIEnv* env, jobject, jstring jp
     llama_backend_init();
     const char* p = env->GetStringUTFChars(jpath, nullptr);
     llama_model_params mp = llama_model_default_params();
-    mp.use_mmap = true;
+    mp.load_mode = LLAMA_LOAD_MODE_MMAP;
     g_model = llama_model_load_from_file(p, mp);
     env->ReleaseStringUTFChars(jpath, p);
     if (!g_model) return JNI_FALSE;

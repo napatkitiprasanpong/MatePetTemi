@@ -10,7 +10,7 @@ android {
         ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         externalNativeBuild { cmake { arguments += listOf(
             "-DANDROID_STL=c++_shared", "-DANDROID_ARM_NEON=TRUE", "-DCMAKE_BUILD_TYPE=Release",
-            "-DGGML_NATIVE=OFF", "-DGGML_OPENMP=OFF", "-DLLAMA_CURL=OFF") } }
+            "-DGGML_NATIVE=OFF", "-DGGML_OPENMP=OFF", "-DLLAMA_CURL=OFF", "-DGGML_LLAMAFILE=OFF") } }
     }
     externalNativeBuild { cmake { path = file("src/main/cpp/CMakeLists.txt"); version = "3.22.1" } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_1_8; targetCompatibility = JavaVersion.VERSION_1_8 }
